@@ -39,9 +39,9 @@ postauthors:
   (hyperparameter search, cross-validation). A single fit rarely uses them
   well, and `HistGradientBoosting` can be up to 30x slower with all of them (a
   fix is under review).
-- We reported ~20 issues to other projects, and have fixes in progress in
-  scikit-learn for `HistGradientBoosting`, `KMeans`, categorical feature
-  encoders and `LogisticRegression`. Binning for random forests is next.
+- We reported ~20 issues to other projects, and proposed fixes, still under
+  review, in scikit-learn for `HistGradientBoosting`, `KMeans` and categorical
+  feature encoders. Binning for random forests is next.
 
 In June, at VivaTech, Probabl and Intel
 [announced a collaboration](https://blog.probabl.ai/intel-and-probabl-announce-collaboration-to-accelerate-scikit-learn-on-intel-hardware)
@@ -78,8 +78,8 @@ In short:
   narwhals and conda-forge. Some came with a fix, like the three
   merged in oneDAL;
 - In scikit-learn, merged speed-ups for the encoders and for trees on
-  conda-forge, and PRs under review for `HistGradientBoosting`, `KMeans`,
-  pandas categorical columns in encoders and `LogisticRegression`;
+  conda-forge, and open PRs for `HistGradientBoosting`, `KMeans` and
+  pandas categorical columns in encoders;
 - Around the benchmarks, work by others in the collaboration: official Intel
   GPU support through the Python array API in scikit-learn 1.9, threadpoolctl 3.7.0,
   and thread management in joblib and loky (more at the end of this post).
@@ -253,7 +253,7 @@ of the tree ones. The most impactful:
   `n_features > n_samples`, because it doesn't use the dual formulation like
   scikit-learn does
   ([sklearnex#3377](https://github.com/uxlfoundation/scikit-learn-intelex/issues/3377),
-  fixed soon by [oneDAL#3899](https://github.com/uxlfoundation/oneDAL/pull/3899)).
+  with a fix proposed in [oneDAL#3899](https://github.com/uxlfoundation/oneDAL/pull/3899)).
 
 The Intel team has been quick to respond on all of them and fixes are either
 already merged or on the way for most of them.
@@ -355,10 +355,10 @@ they use a more recent OpenMP runtime than the PyPI wheels. I wrote down what
 I know about it in [#34764](https://github.com/scikit-learn/scikit-learn/issues/34764).
 
 [#34935](https://github.com/scikit-learn/scikit-learn/pull/34935) implements
-different strategies to better utilize OpenMP threads. It gives 2x to
-10x speed-ups for small and medium datasets on the server and on laptops with
-conda-forge-like OpenMP settings. It's under review, and the full story will
-get its own blog post.
+different strategies to better utilize OpenMP threads. In our benchmarks, it
+gives 2x to 10x speed-ups for small and medium datasets on the server and on
+laptops with conda-forge-like OpenMP settings. It's still under review, and the
+full story will get its own blog post.
 
 ### GPUs and the Python array API: early results
 
@@ -415,24 +415,24 @@ from laptops to data center servers.
 [#34935](https://github.com/scikit-learn/scikit-learn/pull/34935) above.
 
 **`KMeans`.** Looking at why `sklearnex` is so much faster on `KMeans` led to
-the most promising speed-ups so far, in two PRs. On the Xeon server, the
-k-means++ initialization took 75% to 97% of the fit time: for float32 data,
-it went through many small float64 BLAS calls, and for low-dimensional data,
-single-threaded NumPy passes dominated.
+two PRs, still under review, that look like the most promising speed-ups so
+far. On the Xeon server, the k-means++ initialization took 75% to 97% of the
+fit time: for float32 data, it went through many small float64 BLAS calls,
+and for low-dimensional data, single-threaded NumPy passes dominated.
 [#35140](https://github.com/scikit-learn/scikit-learn/pull/35140) computes
-each step of the initialization in a single OpenMP kernel: on one socket of
-the server, the initialization gets ~8x faster with OpenBLAS and ~20x faster
-with MKL (median over 34 cases), and ~10x faster on the laptop. The Lloyd
-iterations that follow stopped scaling at ~16 threads, because of costs that
-grow with the number of threads: a lock to merge the per-thread buffers, the
-GIL taken by every thread at each iteration, and buffers allocated at each
-iteration.
+each step of the initialization in a single OpenMP kernel. In our
+benchmarks, on one socket of the server, the initialization gets ~8x faster
+with OpenBLAS and ~20x faster with MKL (median over 34 cases), and ~10x
+faster on the laptop. The Lloyd iterations that follow stopped scaling at
+~16 threads, because of costs that grow with the number of threads: a lock
+to merge the per-thread buffers, the GIL taken by every thread at each
+iteration, and buffers allocated at each iteration.
 [#35193](https://github.com/scikit-learn/scikit-learn/pull/35193) removes
-them: the iterations get ~4x to ~6x faster (median) on one socket of the
-server, and up to 29x on sparse data. On the laptop, with fewer threads, it's
-on par with `main` in most cases.
+them. In our benchmarks, the iterations get ~4x to ~6x faster (median) on one
+socket of the server, and up to 29x on sparse data. On the laptop, with fewer
+threads, it's on par with `main` in most cases.
 
-Together, they should also close a long-standing issue,
+If they are merged, they should also close a long-standing issue,
 [#17334](https://github.com/scikit-learn/scikit-learn/issues/17334), opened in
 2020: `KMeans` with OpenBLAS getting much slower with more threads. On a
 recent Intel laptop, the reproducer of that issue takes ~65 s with the
@@ -448,12 +448,10 @@ Itamar Turner-Trauring sped up unique value counts for strings
 ([#34386](https://github.com/scikit-learn/scikit-learn/pull/34386)). I made
 the encoders work on F-ordered data
 ([#34392](https://github.com/scikit-learn/scikit-learn/pull/34392)). The next
-step, [#34678](https://github.com/scikit-learn/scikit-learn/pull/34678), keeps
-pandas string and categorical columns as `Series` instead of converting them to
-NumPy `object` arrays, and uses pandas' own factorization on them. It brings
-very large speed-ups for columns with the `category` dtype (up to 10x). But
-getting every edge case to behave exactly as on `main` turned out to be
-complex, so it's paused for now.
+step, [#34678](https://github.com/scikit-learn/scikit-learn/pull/34678), tries
+to leverage the internal encoding of pandas categorical columns, but getting
+every edge case to behave exactly as on `main` turned out to be complex, so
+it's paused for now.
 
 **Trees.** Binning is the main reason `sklearnex`'s random forests are faster,
 and the next big item is to add it to scikit-learn's `RandomForest*` and
@@ -464,13 +462,7 @@ the laptop, but less good ones on the server for now.
 **Linear models.** Copies of `X` can take a large share of the fit time of
 linear models: they are slow, single-threaded and double the peak memory,
 while the rest of the fit runs in multi-threaded BLAS. So we're looking for
-the copies that can be avoided. For instance, the `lbfgs` solver of
-`LogisticRegression` forces `X` to C-order, which copies it when it's
-F-ordered (as it often is when it comes from a dataframe).
-[#34903](https://github.com/scikit-learn/scikit-learn/pull/34903) keeps the
-caller's layout: it can be up to 2x faster on F-ordered `X`, while halving the
-peak memory. `Ridge` copies `X` to center it, and avoiding that copy is
-possible too, but at some cost in numerical stability.
+the copies that can be avoided.
 
 **Benchmarks.**
 
