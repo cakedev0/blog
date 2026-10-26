@@ -40,8 +40,8 @@ postauthors:
   well, and `HistGradientBoosting` can be up to 30x slower with all of them (a
   fix is under review).
 - We reported ~20 issues to other projects, and have fixes in progress in
-  scikit-learn for `HistGradientBoosting`, categorical feature encoders,
-  `Ridge` and `LogisticRegression`. Binning for random forests is next.
+  scikit-learn for `HistGradientBoosting`, `KMeans`, categorical feature
+  encoders and `LogisticRegression`. Binning for random forests is next.
 
 In June, at VivaTech, Probabl and Intel
 [announced a collaboration](https://blog.probabl.ai/intel-and-probabl-announce-collaboration-to-accelerate-scikit-learn-on-intel-hardware)
@@ -78,8 +78,8 @@ In short:
   narwhals and conda-forge. Some came with a fix, like the three
   merged in oneDAL;
 - In scikit-learn, merged speed-ups for the encoders and for trees on
-  conda-forge, and PRs under review for `HistGradientBoosting`, pandas
-  categorical columns in encoders, `Ridge` and `LogisticRegression`;
+  conda-forge, and PRs under review for `HistGradientBoosting`, `KMeans`,
+  pandas categorical columns in encoders and `LogisticRegression`;
 - Around the benchmarks, work by others in the collaboration: official Intel
   GPU support through the Python array API in scikit-learn 1.9, threadpoolctl 3.7.0,
   and thread management in joblib and loky (more at the end of this post).
@@ -369,8 +369,8 @@ are benchmarked on GPU for now, and here is where we stand:
 - `LogisticRegression` on GPU is fairly fast.
 - `Ridge` uses the SVD solver under the array API instead of Cholesky, which
   makes it much slower than the Cholesky solver used by default on CPU.
-  [#35060](https://github.com/scikit-learn/scikit-learn/pull/35060) is an
-  attempt to add array API support to the Cholesky solver.
+  [#35060](https://github.com/scikit-learn/scikit-learn/issues/35060) proposes
+  adding array API support to the Cholesky solver.
 
 The benchmarks also found bugs in PyTorch's XPU backend, for instance a
 [50x to 80x slowdown in `matmul`](https://github.com/intel/torch-xpu-ops/issues/4805)
@@ -414,6 +414,34 @@ from laptops to data center servers.
 **`HistGradientBoosting` scalability.** See
 [#34935](https://github.com/scikit-learn/scikit-learn/pull/34935) above.
 
+**`KMeans`.** Looking at why `sklearnex` is so much faster on `KMeans` led to
+the most promising speed-ups so far, in two PRs. On the Xeon server, the
+k-means++ initialization took 75% to 97% of the fit time: for float32 data,
+it went through many small float64 BLAS calls, and for low-dimensional data,
+single-threaded NumPy passes dominated.
+[#35140](https://github.com/scikit-learn/scikit-learn/pull/35140) computes
+each step of the initialization in a single OpenMP kernel: on one socket of
+the server, the initialization gets ~8x faster with OpenBLAS and ~20x faster
+with MKL (median over 34 cases), and ~10x faster on the laptop. The Lloyd
+iterations that follow stopped scaling at ~16 threads, because of costs that
+grow with the number of threads: a lock to merge the per-thread buffers, the
+GIL taken by every thread at each iteration, and buffers allocated at each
+iteration.
+[#35193](https://github.com/scikit-learn/scikit-learn/pull/35193) removes
+them: the iterations get ~4x to ~6x faster (median) on one socket of the
+server, and up to 29x on sparse data. On the laptop, with fewer threads, it's
+on par with `main` in most cases.
+
+Together, they should also close a long-standing issue,
+[#17334](https://github.com/scikit-learn/scikit-learn/issues/17334), opened in
+2020: `KMeans` with OpenBLAS getting much slower with more threads. On a
+recent Intel laptop, the reproducer of that issue takes ~65 s with the
+scikit-learn 1.9.1 wheel and ~10 s with both PRs. It drops under 1 s when
+combined with
+[OpenBLAS#6105](https://github.com/OpenMathLib/OpenBLAS/pull/6105), which
+removes the contention between threads calling BLAS concurrently, and will
+ship in the next OpenBLAS release.
+
 **Encoders.** Profiling a typical tabular pipeline showed `OneHotEncoder` and
 `OrdinalEncoder` could take a surprising share of the time in some settings.
 Itamar Turner-Trauring sped up unique value counts for strings
@@ -423,7 +451,9 @@ the encoders work on F-ordered data
 step, [#34678](https://github.com/scikit-learn/scikit-learn/pull/34678), keeps
 pandas string and categorical columns as `Series` instead of converting them to
 NumPy `object` arrays, and uses pandas' own factorization on them. It brings
-very large speed-ups for columns with the `category` dtype (up to 10x).
+very large speed-ups for columns with the `category` dtype (up to 10x). But
+getting every edge case to behave exactly as on `main` turned out to be
+complex, so it's paused for now.
 
 **Trees.** Binning is the main reason `sklearnex`'s random forests are faster,
 and the next big item is to add it to scikit-learn's `RandomForest*` and
@@ -431,18 +461,16 @@ and the next big item is to add it to scikit-learn's `RandomForest*` and
 splits: SIMD sort and radix sort. Radix sort gives very promising results on
 the laptop, but less good ones on the server for now.
 
-**`Ridge` and `LogisticRegression`.** For `Ridge`, an algebra
-trick avoids re-centering (and copying) `X` in the Cholesky solver, for 1.2x
-to 2x speed-ups
-([#34793](https://github.com/scikit-learn/scikit-learn/pull/34793)). For now,
-we agreed to limit the trick to float64 `X`, because it's less stable
-numerically in some edge cases.
-
-For `LogisticRegression`, the `lbfgs` solver forces `X` to C-order, which copies
-it when it's F-ordered (as it often is when it comes from a dataframe).
+**Linear models.** Copies of `X` can take a large share of the fit time of
+linear models: they are slow, single-threaded and double the peak memory,
+while the rest of the fit runs in multi-threaded BLAS. So we're looking for
+the copies that can be avoided. For instance, the `lbfgs` solver of
+`LogisticRegression` forces `X` to C-order, which copies it when it's
+F-ordered (as it often is when it comes from a dataframe).
 [#34903](https://github.com/scikit-learn/scikit-learn/pull/34903) keeps the
 caller's layout: it can be up to 2x faster on F-ordered `X`, while halving the
-peak memory.
+peak memory. `Ridge` copies `X` to center it, and avoiding that copy is
+possible too, but at some cost in numerical stability.
 
 **Benchmarks.**
 
@@ -472,15 +500,6 @@ your experience, please
 I'm particularly curious about workloads where a single fit on many cores
 matters to you: so far, most of our cases suggest that the outer loop is
 where the cores should go.
-
-## About me
-
-I'm Arthur Lacote ([@cakedev0](https://github.com/cakedev0) on GitHub), and I
-work at Probabl on scikit-learn since April 2026. My background is a mix of data
-science and computer science, with a fair amount of algorithms and competitive
-programming. These days I'd call myself a performance engineer, though I'm
-still learning: this project already taught me about so many deeply technical
-aspects of performance, and I can see I've only just started.
 
 ## Acknowledgements
 
