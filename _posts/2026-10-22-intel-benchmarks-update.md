@@ -397,7 +397,7 @@ For the next months, our priorities are:
    documentation;
 3. Add binning to random forests and extra trees, which should speed them up
    considerably;
-4. Finish the encoder speed-ups, which turned out to be an easy-to-fix
+4. Finish the encoder speed-ups, which turned out to be a
    bottleneck in some pipelines;
 5. Extend the benchmarks.
 
