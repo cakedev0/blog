@@ -42,6 +42,10 @@ postauthors:
 - We reported ~20 issues to other projects, and proposed fixes, still under
   review, in scikit-learn for `HistGradientBoosting`, `KMeans` and categorical
   feature encoders. Binning for random forests is next.
+- For most users, there's nothing to do: the fixes go upstream
+  (scikit-learn, but also OpenBLAS, oneDAL, PyTorch, joblib) and reach you
+  when you upgrade. If you run scikit-learn on a machine with many cores, the
+  results can already help you use it better.
 
 In June, at VivaTech, Probabl and Intel
 [announced a collaboration](https://blog.probabl.ai/intel-and-probabl-announce-collaboration-to-accelerate-scikit-learn-on-intel-hardware)
