@@ -36,23 +36,24 @@ postauthors:
   The [code](https://github.com/probabl-ai/scikit-learn-benchmarks) and the
   [results](https://probabl-ai.github.io/scikit-learn-benchmarks/snapshots/v1.rc/)
   are public.
-- The good news: those benchmarks are driving performance improvements in scikit-learn
-  (HGB, K-means, encoders, linear models)
-  and, to a lesser extent, in other projects of the eco-system. Once released, most of
-  these improvements reach users without any change on their side, and not only on Intel
+- The good news: these benchmarks are driving performance improvements in
+  scikit-learn (`HistGradientBoosting`, `KMeans`, encoders, etc.)
+  and, to a lesser extent, in other projects of the ecosystem (OpenBLAS,
+  oneDAL, PyTorch, joblib, loky). Once released, these improvements
+  reach users without any change on their side, and not only on Intel
   hardware.
-- If you run scikit-learn on a machine with many cores, you might be interested to look into
-  benchmark results in more details. One major tip: put the cores in the outer loop
+- If you run scikit-learn on a machine with many cores, the benchmark results
+  are worth a closer look. The main tip: put the cores in the outer loop
   (hyperparameter search, cross-validation). A single fit rarely uses them
   well, and `HistGradientBoosting` can be up to 30x slower with all of them (a
   fix is under review).
-- If you can't wait for performance improvements to land in scikit-learn and need performance now, 
-  you might want to look at 
+- If you need speed now, without waiting for these improvements to land in
+  scikit-learn, have a look at
   [scikit-learn-intelex](https://uxlfoundation.github.io/scikit-learn-intelex/2026.1/),
   Intel's extension that swaps in faster implementations while keeping the
-  scikit-learn API.
-  For tree-based models and `KMeans`, it's the fastest option today, among what
-  we benchmarked. For linear models, it's the MKL build (TODO: link on how to install it below) of scikit-learn.
+  scikit-learn API. Among what we benchmarked, it's the fastest option today
+  for tree-based models and `KMeans`. For linear models, the fastest is the
+  [MKL build of scikit-learn](#for-linear-models-pick-the-mkl-build).
 
 In June, at VivaTech, Probabl and Intel
 [announced a collaboration](https://blog.probabl.ai/intel-and-probabl-announce-collaboration-to-accelerate-scikit-learn-on-intel-hardware)
