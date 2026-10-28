@@ -49,7 +49,7 @@ postauthors:
   fix is under review).
 - If you need speed now, without waiting for these improvements to land in
   scikit-learn, have a look at
-  [scikit-learn-intelex](https://uxlfoundation.github.io/scikit-learn-intelex/2026.1/),
+  [scikit-learn-intelex](https://uxlfoundation.github.io/scikit-learn-intelex/2026.2/),
   Intel's extension that swaps in faster implementations while keeping the
   scikit-learn API. Among what we benchmarked, it's the fastest option today
   for tree-based models and `KMeans`. For linear models, the fastest is the
@@ -72,7 +72,7 @@ The Probabl Labs team has been working on it since April 2026, and this post
 is a first progress update. So far, the core of the outcome is a
 representative benchmark suite, surfacing most important problems and their
 root causes: in scikit-learn, in
-[scikit-learn-intelex](https://uxlfoundation.github.io/scikit-learn-intelex/2026.1/),
+[scikit-learn-intelex](https://uxlfoundation.github.io/scikit-learn-intelex/2026.2/),
 in interactions between BLAS libraries
 and OpenMP runtimes, in PyTorch. Below, we explain how the benchmarks work, what they show,
 and what we're now fixing because of them.
