@@ -81,25 +81,29 @@ what we're now fixing because of them, and how they work.
 
 ## Where we are after five months
 
-In short:
+The first outcome is a benchmark repository and its
+[dashboards](https://probabl-ai.github.io/scikit-learn-benchmarks/snapshots/v1.rc/).
+Besides comparing implementations, builds and machines, they also check the
+impact of scikit-learn PRs on Intel machines before they get merged.
 
-- A benchmark repository and its
-  [dashboards](https://probabl-ai.github.io/scikit-learn-benchmarks/snapshots/v1.rc/),
-  which also check the impact of scikit-learn PRs on Intel machines before
-  they get merged.
-- ~20 issues reported to other projects: 11 to scikit-learn-intelex and
-  oneDAL, the others to PyTorch's XPU backend, OpenBLAS, joblib, loky,
-  narwhals and conda-forge. Some came with a fix, like the three
-  merged in oneDAL.
-- In scikit-learn, merged speed-ups for the encoders, for trees on
-  conda-forge and for the initialization of [`KMeans`][kmeans], and open PRs
-  for [`HistGradientBoosting`][hgb], the iterations of `KMeans` and pandas
-  categorical columns in encoders.
-- Around the benchmarks, work by others in the collaboration: official Intel
-  GPU support through the Python array API in scikit-learn 1.9, threadpoolctl 3.7.0,
-  and thread management in joblib and loky (more at the end of this post).
+Running scikit-learn and its alternatives on real datasets also surfaced
+bugs and slowdowns in other projects. We reported ~20 issues: 11 to
+scikit-learn-intelex and oneDAL, the others to PyTorch's XPU backend,
+OpenBLAS, joblib, loky, narwhals and conda-forge. Some came with a fix, like
+the three merged in oneDAL.
 
-Most of the scikit-learn changes are still under review. So far, the value is
+In scikit-learn itself, the benchmarks showed where the time goes. Speed-ups
+for the encoders, for trees on conda-forge and for the initialization of
+[`KMeans`][kmeans] are merged. PRs for [`HistGradientBoosting`][hgb], the
+iterations of `KMeans` and pandas categorical columns in encoders are still
+under review.
+
+Meanwhile, related work landed in scikit-learn and its dependencies:
+official Intel GPU support through the Python array API in
+scikit-learn 1.9, threadpoolctl 3.7.0, and thread management in joblib and
+loky (more at the end of this post).
+
+So far, the value is
 mostly in knowing where the problems are, and in fixing them where they live, which is
 sometimes not scikit-learn. All of it happens in the open, in the upstream
 projects, under their own open source licenses, so every user of these
@@ -511,8 +515,8 @@ the copies that can be avoided.
   these cases, that we'd like to create in collaboration with the Phoronix
   maintainers.
 
-**Threads and the Python array API.** These are the other workstreams of the
-collaboration. Itamar Turner-Trauring (Quansight) and Olivier Grisel (Probabl)
+**Threads and the Python array API.** These are related workstreams.
+Itamar Turner-Trauring (Quansight) and Olivier Grisel (Probabl)
 work on how scikit-learn and its dependencies manage threads, in particular
 for free-threaded Python:
 [threadpoolctl 3.7.0](https://github.com/joblib/threadpoolctl/blob/master/CHANGES.md#370-2026-09-15)
