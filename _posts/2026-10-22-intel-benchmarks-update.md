@@ -92,9 +92,10 @@ In short:
   oneDAL, the others to PyTorch's XPU backend, OpenBLAS, joblib, loky,
   narwhals and conda-forge. Some came with a fix, like the three
   merged in oneDAL.
-- In scikit-learn, merged speed-ups for the encoders and for trees on
-  conda-forge, and open PRs for [`HistGradientBoosting`][hgb], [`KMeans`][kmeans] and
-  pandas categorical columns in encoders.
+- In scikit-learn, merged speed-ups for the encoders, for trees on
+  conda-forge and for the initialization of [`KMeans`][kmeans], and open PRs
+  for [`HistGradientBoosting`][hgb], the iterations of `KMeans` and pandas
+  categorical columns in encoders.
 - Around the benchmarks, work by others in the collaboration: official Intel
   GPU support through the Python array API in scikit-learn 1.9, threadpoolctl 3.7.0,
   and thread management in joblib and loky (more at the end of this post).
@@ -106,6 +107,67 @@ projects, under their own open source licenses, so every user of these
 projects benefits, whatever their hardware vendor. The fixes that land in
 scikit-learn reach users when they upgrade: same API, faster on the hardware
 they already have.
+
+## A short primer on parallelism in scikit-learn
+
+Most of what we found is about how scikit-learn uses the cores of a machine,
+so here are the basics. The
+[parallelism guide](https://scikit-learn.org/stable/computing/parallelism.html)
+of the scikit-learn documentation has more details.
+
+**Outer and inner parallelism.** There are usually two levels where work can
+run in parallel. The outer level runs many independent fits: the candidates
+of a hyperparameter search, the folds of a cross-validation. The inner level
+splits a single fit across cores: the trees of a random forest, the
+histograms of a gradient boosting iteration, a matrix product. Outer
+parallelism is the easy kind: the fits don't need to talk to each other, so
+it scales well as long as there is enough memory. Inner parallelism is
+harder: the threads of a single fit have to synchronize, often thousands of
+times per fit.
+
+**Three mechanisms.** scikit-learn relies on three of them, sometimes within
+the same estimator:
+
+- [joblib](https://joblib.readthedocs.io/), controlled by the `n_jobs`
+  parameter, runs Python functions in parallel. Its default backend, loky,
+  uses separate processes: that's how [`GridSearchCV`][gridsearchcv] or
+  [`cross_validate`][cross_validate] fit their candidates and folds. Its
+  threading backend uses threads of the same process, which share the data
+  instead of copying it. But Python's global interpreter lock (GIL) runs
+  Python code in only one thread at a time, so threads only help when the
+  heavy work happens in compiled code, which can release the lock. That's the
+  case for the tree building of [`RandomForest*`][rf] and
+  [`ExtraTrees*`][et], written in Cython, which fit their trees in threads.
+- [OpenMP](https://www.openmp.org/) parallelizes loops in scikit-learn's own
+  compiled code: [`HistGradientBoosting*`][hgb], [`KMeans`][kmeans], nearest
+  neighbors and pairwise distances, among others. These estimators have no
+  `n_jobs` parameter, and use as many threads as there are logical CPUs by
+  default.
+- BLAS libraries, such as OpenBLAS or MKL, run the matrix products and
+  decompositions that NumPy and SciPy call. Linear models spend most of their
+  time there. They are also multi-threaded by default.
+
+The OpenMP and BLAS threads aren't set through scikit-learn's API, but with
+environment variables (`OMP_NUM_THREADS`, `OPENBLAS_NUM_THREADS`,
+`MKL_NUM_THREADS`) or, from Python, with
+[threadpoolctl](https://github.com/joblib/threadpoolctl).
+
+Everything else runs on a single core: Python code, input validation, copies
+and most NumPy operations outside of BLAS, and the steps of an algorithm that
+depend on each other, like the iterations of a solver or of gradient
+boosting. These sequential parts set a floor that more cores can't lower.
+
+**Overhead.** Parallelism has a cost: waking threads up, splitting the work
+and merging the results take time, and this cost grows with the number of
+threads. When each parallel chunk of work is small, more threads can make a
+fit slower.
+
+**Oversubscription.** This is the other trap: running more threads than
+cores, for instance, on a 16-core machine, 16 outer workers that each start 16
+OpenMP threads: 256 threads for 16 cores. The threads then compete for the
+cores, and the time goes into switching between them. To prevent it, joblib
+limits the OpenMP and BLAS threads of its worker processes to
+`cpu_count() // n_jobs`.
 
 ## Why a new benchmark suite?
 
@@ -335,18 +397,16 @@ fitted in parallel, it gets through fits ~10x to 15x faster than the laptop,
 even for linear models. That's close to the ratio of physical cores (172 vs
 16).
 
-The two levels of parallelism (candidates in parallel, threads inside each
-fit) don't always cooperate. joblib limits the number of OpenMP and BLAS
-threads in its worker processes, but not the threads that random forests
-start with joblib's threading backend. On the server, a search over
-[`RandomForestClassifier`][randomforestclassifier] gets up to ~1.8x slower beyond ~22 outer workers
-because of this oversubscription. This won't be the case in the next joblib
-release: [joblib#1825](https://github.com/joblib/joblib/pull/1825) now limits
-these nested calls too.
+So if you work on a machine with many cores, parallelize the outer loop
+(hyperparameter search, cross-validation) instead of counting on a single fit
+to use all the cores, by setting `n_jobs` on the search:
 
-So if you work on a machine with many cores, parallelize the outer loop (hyperparameter
-search, cross-validation) instead of counting on a single fit to use all the
-cores. On a 172-core server, that's the difference between using most of the
+```python
+search = GridSearchCV(LogisticRegression(), param_grid, n_jobs=32)
+search.fit(X, y)
+```
+
+On a 172-core server, that's the difference between using most of the
 machine and using a few percent of it.
 
 ### `HistGradientBoosting`: the best number of threads depends on the data
@@ -357,6 +417,13 @@ on the shape of the data: 1 thread for the smallest workloads, 4 to 8 for
 medium ones, 16 to 64 for the largest. Past that point, fits get slower: every workload is 2x to 30x slower
 on 128 or 172 threads than on its best thread count. And by default, HGB uses
 all the cores of the machine.
+
+Until the fix lands, you can cap its OpenMP threads with threadpoolctl:
+
+```python
+with threadpool_limits(limits=8, user_api="openmp"):
+    HistGradientBoostingClassifier().fit(X, y)
+```
 
 ![`HistGradientBoosting` fit time by phase vs number of threads, on `year_prediction_msd` and `covtype` for a Xeon server](/assets/images/posts_images/intel-benchmarks/hgb_dashboard.png)
 ![Legend: bin fit, bin transform, other / unmeasured, apply split, find split, compute hist](/assets/images/posts_images/intel-benchmarks/hgb_dashboard_legend.png)
@@ -381,32 +448,17 @@ gives 2x to 10x speed-ups for small and medium datasets on the server and on
 laptops with conda-forge-like OpenMP settings. It's still under review, and the
 full story will get its own blog post.
 
-### GPUs and the Python array API: early results
+### Other issues found and fixed along the way
 
-Intel GPUs are officially supported through the array API since scikit-learn
-1.9, with PyTorch's XPU device and with dpnp. Only [`LogisticRegression`][logisticregression] and [`Ridge`][ridge]
-are benchmarked on GPU for now, and here is where we stand:
-
-- [`LogisticRegression`][logisticregression] on GPU is fairly fast.
-- [`Ridge`][ridge] uses the SVD solver under the array API instead of Cholesky, which
-  makes it much slower than the Cholesky solver used by default on CPU.
-  [#35060](https://github.com/scikit-learn/scikit-learn/issues/35060) proposes
-  adding array API support to the Cholesky solver.
-
-The benchmarks also found bugs in PyTorch's XPU backend, for instance a
-[50x to 80x slowdown in `matmul`](https://github.com/intel/torch-xpu-ops/issues/4805)
-once the reduction dimension exceeds 2^24 (fixed), and
-[bad precision for float64 matrix-vector products](https://github.com/pytorch/pytorch/issues/182282)
-(fixed). These kinds of fixes are upstreamed regularly, so we advise users to
-upgrade to the most recent PyTorch often to benefit from them. For instance,
-the latest release at the time of writing (2.14) doesn't include all the
-fixes listed above.
-
-Other issues found and fixed along the way:
-[an OpenBLAS crash](https://github.com/OpenMathLib/OpenBLAS/issues/5958) with
-[`KMeans`][kmeans] on the 344-logical-CPU server,
+[An OpenBLAS crash](https://github.com/OpenMathLib/OpenBLAS/issues/5958) with
+[`KMeans`][kmeans] on the 344-logical-CPU server (fixed recently by
+[OpenBLAS#6105](https://github.com/OpenMathLib/OpenBLAS/pull/6105), which
+will ship in the next OpenBLAS release),
 [wrong physical core counts in loky](https://github.com/joblib/loky/issues/639)
-under CPU affinity.
+under CPU affinity, and, in PyTorch's Intel GPU backend, a
+[50x to 80x slowdown in `matmul`](https://github.com/intel/torch-xpu-ops/issues/4805)
+and
+[bad precision for float64 matrix-vector products](https://github.com/pytorch/pytorch/issues/182282).
 
 ## What's next
 
@@ -414,19 +466,21 @@ For the next months, our priorities are:
 
 1. Improve the scalability of [`HistGradientBoosting`][hgb], and make the new tools
    developed for this available in `threadpoolctl`
-2. Turn the findings into performance guidance in the scikit-learn
+2. Finish the [`KMeans`][kmeans] speed-ups: the first one is merged, the
+   second is under review
+3. Turn the findings into performance guidance in the scikit-learn
    documentation
-3. Add binning to random forests and extra trees, which should speed them up
+4. Add binning to random forests and extra trees, which should speed them up
    considerably
-4. Finish the encoder speed-ups, which turned out to be a
+5. Finish the encoder speed-ups, which turned out to be a
    bottleneck in some pipelines
-5. Extend the benchmarks
+6. Extend the benchmarks
 
 The biggest pieces will get their own blog post. Here is where each one
 stands.
 
-**Documentation.** Many of the findings above (which build to install, how
-to set threads, using the `category` dtype) belong in the
+**Documentation.** Many of the findings above (which build to install or how
+to set threads) belong in the
 [performance](https://scikit-learn.org/stable/computing/computational_performance.html)
 and [parallelism](https://scikit-learn.org/stable/computing/parallelism.html)
 guides of the scikit-learn documentation, with a section for Intel users,
@@ -436,24 +490,24 @@ from laptops to data center servers.
 [#34935](https://github.com/scikit-learn/scikit-learn/pull/34935) above.
 
 **`KMeans`.** Looking at why `sklearnex` is so much faster on [`KMeans`][kmeans] led to
-two PRs, still under review, that look like the most promising speed-ups so
-far. On the Xeon server, the k-means++ initialization took 75% to 97% of the
+two PRs, the most promising speed-ups so far. On the Xeon server, the k-means++ initialization took 75% to 97% of the
 fit time: for float32 data, it went through many small float64 BLAS calls,
 and for low-dimensional data, single-threaded NumPy passes dominated.
-[#35140](https://github.com/scikit-learn/scikit-learn/pull/35140) computes
-each step of the initialization in a single OpenMP kernel. In our
+[#35140](https://github.com/scikit-learn/scikit-learn/pull/35140), merged and
+coming in scikit-learn 1.10, computes each step of the initialization in a
+single OpenMP kernel. In our
 benchmarks, on one socket of the server, the initialization gets ~8x faster
 with OpenBLAS and ~20x faster with MKL (median over 34 cases), and ~10x
 faster on the laptop. The Lloyd iterations that follow stopped scaling at
 ~16 threads, because of costs that grow with the number of threads: a lock
 to merge the per-thread buffers, the GIL taken by every thread at each
 iteration, and buffers allocated at each iteration.
-[#35193](https://github.com/scikit-learn/scikit-learn/pull/35193) removes
-them. In our benchmarks, the iterations get ~4x to ~6x faster (median) on one
+[#35193](https://github.com/scikit-learn/scikit-learn/pull/35193), still under
+review, removes them. In our benchmarks, the iterations get ~4x to ~6x faster (median) on one
 socket of the server, and up to 29x on sparse data. On the laptop, with fewer
 threads, it's on par with `main` in most cases.
 
-If they are merged, they should also close a long-standing issue,
+Once the second one is merged too, they should close a long-standing issue,
 [#17334](https://github.com/scikit-learn/scikit-learn/issues/17334), opened in
 2020: [`KMeans`][kmeans] with OpenBLAS getting much slower with more threads. On a
 recent Intel laptop, the reproducer of that issue takes ~65 s with the
