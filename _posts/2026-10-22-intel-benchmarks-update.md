@@ -131,9 +131,9 @@ the same estimator:
   parameter, runs Python functions in parallel. Its default backend, loky,
   uses separate processes: that's how [`GridSearchCV`][gridsearchcv] or
   [`cross_validate`][cross_validate] fit their candidates and folds. Its
-  threading backend uses threads of the same process, which share the data
+  alternative 'threading' backend uses threads of the same process, which share the data
   instead of copying it. But Python's global interpreter lock (GIL) runs
-  Python code in only one thread at a time, so threads only help when the
+  Python code in only one thread at a time, so threads (as used by the non-default 'threading' backend) only help when the
   heavy work happens in compiled code, which can release the lock. That's the
   case for the tree building of [`RandomForest*`][rf] and
   [`ExtraTrees*`][et], written in Cython, which fit their trees in threads.
