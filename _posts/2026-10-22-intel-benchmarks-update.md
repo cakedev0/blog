@@ -76,8 +76,8 @@ representative benchmark suite, surfacing most important problems and their
 root causes: in scikit-learn, in
 [scikit-learn-intelex](https://uxlfoundation.github.io/scikit-learn-intelex/2026.2/),
 in interactions between BLAS libraries
-and OpenMP runtimes, in PyTorch. Below, we explain how the benchmarks work, what they show,
-and what we're now fixing because of them.
+and OpenMP runtimes, in PyTorch. Below, we explain what the benchmarks show,
+what we're now fixing because of them, and how they work.
 
 ## Where we are after five months
 
@@ -168,124 +168,18 @@ cores, and the time goes into switching between them. To prevent it, joblib
 limits the OpenMP and BLAS threads of its worker processes to
 `cpu_count() // n_jobs`.
 
-## Why a new benchmark suite?
+## Benchmark results and takeaways
 
-Before optimizing anything, we had to run some benchmarks with three goals in
-mind:
-
-- Profile realistic cases, looking for inefficiencies where scikit-learn
-  shows room for improvement
-- Reliably measure the impact of optimizations in scikit-learn before merging
-  them
-- Show users the trade-offs: which workloads benefit from
-  scikit-learn-intelex, a GPU, a different build or a bigger machine, and
-  when a comparison isn't like-for-like
-
-Existing benchmarks were addressing different performance questions or were
-meant as functionality tests. For instance, the
-[scikit-learn workload of the Phoronix Test Suite](https://openbenchmarking.org/test/pts/scikit-learn),
-which many hardware reviews use, runs the benchmark scripts of scikit-learn
-1.2.2. Some of them scale extremely poorly: [`HistGradientBoosting`][hgb] gets up to
-~20x slower on a 64-core server than on a laptop. That says
-more about the benchmark (and about thread management, more on that below)
-than about the hardware.
-
-Intel's [scikit-learn_bench](https://github.com/IntelPython/scikit-learn_bench)
-was a much better starting point. I started from a fork of it, and parts of
-our code still derive from it, but we needed things it wasn't designed for:
-comparing builds of the same library, measuring how a fit scales with the
-number of cores, and benchmarking a scikit-learn pull request before it gets
-merged. So it grew into its own project.
-
-## How the benchmarks work
-
-The suite fits and predicts with a restricted set of important estimators:
-
-- Linear models: [`LinearRegression`][linearregression], [`Ridge`][ridge]
-  and [`LogisticRegression`][logisticregression]
-- Tree-based models: [`RandomForest*`][rf], [`ExtraTrees*`][et] and
-  [`HistGradientBoosting*`][hgb] (classifiers and regressors)
-- Clustering: [`KMeans`][kmeans]
-
-They run on two kinds of data. Synthetic datasets cover a matrix of shapes
-(many samples, many features, tiny, large...) while keeping the total runtime
-reasonable. Around 15 publicly and freely available
-[real datasets](https://github.com/probabl-ai/scikit-learn-benchmarks/blob/main/configs/_real_datasets.py)
-(covtype, SUSY, Ames housing, KDD Cup 2009, Amazon employee access...) come
-with realistic preprocessing, including categorical columns and missing
-values, and with hyperparameters picked by a small random search instead of
-library defaults.
-
-Each case runs in several software environments, all locked with
-[pixi](https://pixi.sh):
-
-- Builds of scikit-learn: the PyPI wheel, and conda-forge with MKL or with
-  OpenBLAS (native "pthreads" threading backend or combined with LLVM OpenMP).
-- [scikit-learn-intelex](https://uxlfoundation.github.io/scikit-learn-intelex/latest/)
-  (`sklearnex`), on CPU and Intel GPU. It's an extension, initially developed
-  by Intel, that replaces some scikit-learn estimators with accelerated
-  implementations behind the same API, and falls back to scikit-learn when it
-  doesn't support some parameters.
-- [Python array API](https://scikit-learn.org/stable/modules/array_api.html)
-  backends: [PyTorch](https://pytorch.org/) (CPU,
-  [Intel XPU](https://docs.pytorch.org/docs/stable/notes/get_start_xpu.html),
-  [NVIDIA CUDA](https://docs.pytorch.org/docs/stable/notes/cuda.html),
-  [Apple MPS](https://docs.pytorch.org/docs/stable/notes/mps.html)),
-  [dpnp](https://github.com/IntelPython/dpnp) and [CuPy](https://cupy.dev/).
-
-The two main machines are provided by Intel:
-
-- A high-end two-socket server with Intel Xeon 6787P CPUs (172 cores in total, 344
-  with hyper-threading, 500GB of RAM)
-- A laptop with an Intel Core Ultra X7 358H CPU (16 cores) and its integrated
-  Arc B390 GPU
-
-
-The hard part is comparing fairly. By default, `sklearnex` random forests bin
-the features, which scikit-learn doesn't implement yet. Solvers stop after
-different numbers of iterations. Some backends silently fall back to
-scikit-learn for unsupported parameters. Hiding or dropping these cases would bias the
-results. So each run records its metrics (ROC AUC, R2, inertia) and setup,
-and the dashboards flag every case where the setup or the metrics differ
-from the baseline. Each run also records the hardware and the software stack
-(versions, BLAS and OpenMP runtimes).
-
-The results are split in several dashboards, each varying one thing and
-keeping the rest fixed:
-
-- [Implementations](https://probabl-ai.github.io/scikit-learn-benchmarks/snapshots/v1.rc/per_hardware.html):
-  scikit-learn vs `sklearnex` vs Python array API backends, on the same machine
-- [Builds](https://probabl-ai.github.io/scikit-learn-benchmarks/snapshots/v1.rc/builds_comparison.html):
-  the same scikit-learn code with different BLAS and OpenMP runtimes
-- [Hardware](https://probabl-ai.github.io/scikit-learn-benchmarks/snapshots/v1.rc/hardware_comparisons.html):
-  the same software on different machines
-- [Core-count scalability](https://probabl-ai.github.io/scikit-learn-benchmarks/snapshots/v1.rc/models_scalability.html):
-  how the time of a single fit changes with the number of cores
-- [Hyperparameter search scalability](https://probabl-ai.github.io/scikit-learn-benchmarks/snapshots/v1.rc/hptuning_scalability.html):
-  how a [`RandomizedSearchCV`][randomizedsearchcv] scales with its outer `n_jobs`
-- [`HistGradientBoosting` breakdown](https://probabl-ai.github.io/scikit-learn-benchmarks/snapshots/v1.rc/hgb_scaling.html):
-  which phases of an HGB fit scale with threads and which don't
-
-Every point can be hovered, and links to a row in a table with the exact
-timings, metrics and warnings.
-
-![Implementations dashboard: speed-up of each implementation vs the scikit-learn PyPI wheel, for linear model fits](/assets/images/posts_images/intel-benchmarks/linear_implem_dashboard.png)
-
-*Implementations dashboard on the laptop: speed-up of each implementation over
-the scikit-learn PyPI wheel, for linear model fits. Each point is one case
-(estimator, dataset, parameters).*
-
-I also started using the same machinery to benchmark scikit-learn pull
-requests, through some automation. This is for instance what I used to check
-that preserving F-ordered data in [`LogisticRegression`][logisticregression] helps
-([example](https://github.com/probabl-ai/scikit-learn-benchmarks/pull/100)).
-
-
-## What we found
+Unless stated otherwise, the numbers below come from two machines provided
+by Intel: a two-socket server with Intel Xeon 6787P CPUs (172 cores in total,
+344 with hyper-threading, 500GB of RAM), and a laptop with an Intel Core
+Ultra X7 358H CPU (16 cores) and its integrated Arc B390 GPU. How the
+benchmarks work is described [further down](#how-the-benchmarks-work).
 
 ### scikit-learn-intelex is the most consistently fast option on CPU
 
-`sklearnex` replaces some scikit-learn estimators with implementations from
+[scikit-learn-intelex](https://uxlfoundation.github.io/scikit-learn-intelex/latest/)
+(`sklearnex`) replaces some scikit-learn estimators with implementations from
 the oneDAL library (both are now part of the UXL Foundation), and keeps the
 scikit-learn API. Among everything we
 benchmarked, it's the option that speeds up the most cases on CPU. Tree-based
@@ -300,11 +194,11 @@ Part of the tree speed-up comes from binning: `sklearnex` uses
 `max_bins=256` by default, which roughly doubles or triples the fit speed-up.
 When both libraries use the same exact-split algorithm, the gap is much
 smaller. This is a strong argument for adding binning to scikit-learn's
-trees, see the last section.
+trees, see [What's next](#whats-next).
 
 The caveat is that `sklearnex` only supports
-[a subset of estimators and parameters](https://uxlfoundation.github.io/scikit-learn-intelex/latest/algorithms.html),
-and doesn't always behave exactly like scikit-learn. Running it on real
+[a subset of estimators and parameters](https://uxlfoundation.github.io/scikit-learn-intelex/latest/algorithms.html)
+(it falls back to scikit-learn for the rest), and doesn't always behave exactly like scikit-learn. Running it on real
 datasets, with missing values, categorical features and multiclass targets,
 surfaced a number of bugs. I reported 11 issues to
 [scikit-learn-intelex](https://github.com/uxlfoundation/scikit-learn-intelex)
@@ -415,7 +309,7 @@ server, the best number of threads for a [`HistGradientBoosting*`][hgb] fit depe
 on the shape of the data: 1 thread for the smallest workloads, 4 to 8 for
 medium ones, 16 to 64 for the largest. Past that point, fits get slower: every workload is 2x to 30x slower
 on 128 or 172 threads than on its best thread count. And by default, HGB uses
-all the cores of the machine. Until the fix lands, capping the number of threads (for example with `threadpoolctl`) avoids the slowdown.
+all the cores of the machine.
 
 Until the fix lands, you can cap its OpenMP threads with threadpoolctl:
 
@@ -458,6 +352,75 @@ under CPU affinity, and, in PyTorch's Intel GPU backend, a
 [50x to 80x slowdown in `matmul`](https://github.com/intel/torch-xpu-ops/issues/4805)
 and
 [bad precision for float64 matrix-vector products](https://github.com/pytorch/pytorch/issues/182282).
+
+## How the benchmarks work
+
+We needed benchmarks to profile realistic cases, to measure the impact of
+scikit-learn PRs before merging them, and to show users the trade-offs
+between implementations, builds and machines. Existing benchmarks answered
+other questions. For instance, the
+[scikit-learn workload of the Phoronix Test Suite](https://openbenchmarking.org/test/pts/scikit-learn),
+which many hardware reviews use, still runs the benchmark scripts of
+scikit-learn 1.2.2, where [`HistGradientBoosting`][hgb] gets up to ~20x
+slower on a 64-core server than on a laptop: that says more about thread
+management than about the hardware. Intel's
+[scikit-learn_bench](https://github.com/IntelPython/scikit-learn_bench) was a
+much better starting point: our suite started as a fork of it, before
+growing into its own project.
+
+The suite fits and predicts with a restricted set of important estimators:
+
+- Linear models: [`LinearRegression`][linearregression], [`Ridge`][ridge]
+  and [`LogisticRegression`][logisticregression]
+- Tree-based models: [`RandomForest*`][rf], [`ExtraTrees*`][et] and
+  [`HistGradientBoosting*`][hgb] (classifiers and regressors)
+- Clustering: [`KMeans`][kmeans]
+
+They run on synthetic datasets covering a matrix of shapes, and on around 15
+public
+[real datasets](https://github.com/probabl-ai/scikit-learn-benchmarks/blob/main/configs/_real_datasets.py)
+(covtype, SUSY, Ames housing, KDD Cup 2009...) with realistic preprocessing
+and tuned hyperparameters. Each case runs in several environments, all locked
+with [pixi](https://pixi.sh):
+
+- Builds of scikit-learn: the PyPI wheel, and conda-forge with MKL or with
+  OpenBLAS.
+- [scikit-learn-intelex](https://uxlfoundation.github.io/scikit-learn-intelex/latest/),
+  on CPU and Intel GPU.
+- [Python array API](https://scikit-learn.org/stable/modules/array_api.html)
+  backends: [PyTorch](https://pytorch.org/) (CPU,
+  [Intel XPU](https://docs.pytorch.org/docs/stable/notes/get_start_xpu.html),
+  [NVIDIA CUDA](https://docs.pytorch.org/docs/stable/notes/cuda.html),
+  [Apple MPS](https://docs.pytorch.org/docs/stable/notes/mps.html)),
+  [dpnp](https://github.com/IntelPython/dpnp) and [CuPy](https://cupy.dev/).
+
+Comparing fairly is the hard part: `sklearnex` random forests bin the
+features by default, solvers stop after different numbers of iterations, and
+some backends silently fall back to scikit-learn. So each run records its
+metrics, setup, hardware and software stack, and the dashboards flag every
+case where the setup or the metrics differ from the baseline.
+
+The results are split into dashboards that each vary one thing:
+[implementations](https://probabl-ai.github.io/scikit-learn-benchmarks/snapshots/v1.rc/per_hardware.html),
+[builds](https://probabl-ai.github.io/scikit-learn-benchmarks/snapshots/v1.rc/builds_comparison.html),
+[hardware](https://probabl-ai.github.io/scikit-learn-benchmarks/snapshots/v1.rc/hardware_comparisons.html),
+[core-count scalability](https://probabl-ai.github.io/scikit-learn-benchmarks/snapshots/v1.rc/models_scalability.html),
+[hyperparameter search scalability](https://probabl-ai.github.io/scikit-learn-benchmarks/snapshots/v1.rc/hptuning_scalability.html),
+and a
+[breakdown of `HistGradientBoosting` fits](https://probabl-ai.github.io/scikit-learn-benchmarks/snapshots/v1.rc/hgb_scaling.html)
+by phase. Every point can be hovered, and links to the exact timings, metrics
+and warnings.
+
+![Implementations dashboard: speed-up of each implementation vs the scikit-learn PyPI wheel, for linear model fits](/assets/images/posts_images/intel-benchmarks/linear_implem_dashboard.png)
+
+*Implementations dashboard on the laptop: speed-up of each implementation over
+the scikit-learn PyPI wheel, for linear model fits. Each point is one case
+(estimator, dataset, parameters).*
+
+The same machinery also benchmarks scikit-learn pull requests before they get
+merged. This is for instance how I checked that preserving F-ordered data in
+[`LogisticRegression`][logisticregression] helps
+([example](https://github.com/probabl-ai/scikit-learn-benchmarks/pull/100)).
 
 ## What's next
 
