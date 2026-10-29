@@ -54,8 +54,10 @@ postauthors:
   an extension from the [UXL Foundation](https://uxlfoundation.org/), initially
   developed by Intel, that swaps in faster implementations while keeping the
   scikit-learn API. Among what we benchmarked, it's the fastest option today
-  for tree-based models and [`KMeans`][kmeans]. For linear models, the fastest is the
-  [MKL build of scikit-learn](#for-linear-models-pick-the-mkl-build).
+  for tree-based models. For linear models, the fastest is the
+  [MKL build of scikit-learn](#builds-matter-for-linear-models-pick-mkl),
+  which also becomes competitive for [`KMeans`][kmeans] with the speed-ups
+  coming in scikit-learn 1.10.
 
 In June, at VivaTech, Probabl and Intel
 [announced a collaboration](https://blog.probabl.ai/intel-and-probabl-announce-collaboration-to-accelerate-scikit-learn-on-intel-hardware)
@@ -64,22 +66,17 @@ high performance data center servers with hundreds of cores down to consumer
 laptops. We prioritized data center environments and use cases, where
 performance directly translates into cost. If a single fit uses only 4 of the 172 cores, the remaining 168 sit idle unless given other work, such as running multiple fits in parallel. Below, we demonstrate how to do this, and explain how we've optimised a single fit to use more cores.
 
+The Probabl Labs team has been working on these performance improvements
+since April 2026, and this post is a first progress update. Below, we explain
+what the benchmarks show, what we're now fixing because of them, and how they
+work.
+
 > *"Enterprises run scikit-learn at scale while performance and cost directly
 > shape what they can build. Our work with Intel is about delivering
 > measurable gains in both, openly and for everyone, so the whole community
 > moves forward together."* —Yann Lechelle, Executive President of Probabl
 
-The Probabl Labs team has been working on these performance improvements
-since April 2026, and this post
-is a first progress update. So far, the core of the outcome is a
-representative benchmark suite, surfacing most important problems and their
-root causes: in scikit-learn, in
-[scikit-learn-intelex](https://uxlfoundation.github.io/scikit-learn-intelex/2026.2/),
-in interactions between BLAS libraries
-and OpenMP runtimes, in PyTorch. Below, we explain what the benchmarks show,
-what we're now fixing because of them, and how they work.
-
-## Where we are after five months
+## Where we are after six months
 
 The first outcome is a benchmark repository and its
 [dashboards](https://probabl-ai.github.io/scikit-learn-benchmarks/snapshots/v1.rc/).
@@ -92,11 +89,9 @@ scikit-learn-intelex and oneDAL, the others to PyTorch's XPU backend,
 OpenBLAS, joblib, loky, narwhals and conda-forge. Some came with a fix, like
 the three merged in oneDAL.
 
-In scikit-learn itself, the benchmarks showed where the time goes. Speed-ups
-for the encoders, for trees on conda-forge and for the initialization of
-[`KMeans`][kmeans] are merged. PRs for [`HistGradientBoosting`][hgb], the
-iterations of `KMeans` and pandas categorical columns in encoders are still
-under review.
+In scikit-learn itself, the benchmarks showed where the time goes. Some
+speed-ups are already merged, others are under review: they're described in
+[What's next](#whats-next).
 
 Meanwhile, related work landed in scikit-learn and its dependencies:
 official Intel GPU support through the Python array API in
@@ -188,7 +183,9 @@ the oneDAL library (both are now part of the UXL Foundation), and keeps the
 scikit-learn API. Among everything we
 benchmarked, it's the option that speeds up the most cases on CPU. Tree-based
 models and [`KMeans`][kmeans] gain the most: `KMeans` fits are ~3x faster and never
-slower than with scikit-learn. Linear models gain less.
+slower than with scikit-learn 1.9. Linear models gain less. For `KMeans`, the
+speed-ups coming in scikit-learn 1.10 make the MKL build competitive with
+`sklearnex` (see [What's next](#whats-next)).
 
 It also makes much better use of big machines. With scikit-learn, random
 forests and extra trees fit ~2x to 4x faster on the 172-core server than on the
@@ -238,7 +235,7 @@ of the tree ones. The most impactful:
 The Intel team has been quick to respond on all of them and fixes are either
 already merged or on the way for most of them.
 
-### For linear models, pick the MKL build
+### Builds matter: for linear models, pick MKL
 
 This is the cheapest speed-up in this post. With conda-forge's MKL build of
 scikit-learn, BLAS-bound linear model fits are commonly 1.3x to 2x faster
@@ -435,22 +432,27 @@ initialization of [`KMeans`][kmeans]
 
 ## What's next
 
-For the next months, our priorities are:
+Here are our priorities for the next months, in order, and where each one
+stands. The biggest pieces will get their own blog post.
 
-1. Improve the scalability of [`HistGradientBoosting`][hgb], and make the new tools
-   developed for this available in `threadpoolctl`
-2. Finish the [`KMeans`][kmeans] speed-ups: the first one is merged, the
-   second is under review
-3. Turn the findings into performance guidance in the scikit-learn
-   documentation
-4. Add binning to random forests and extra trees, which should speed them up
-   considerably
-5. Finish the encoder speed-ups, which turned out to be a
-   bottleneck in some pipelines
-6. Extend the benchmarks
+**`HistGradientBoosting` scalability.** Get
+[#34935](https://github.com/scikit-learn/scikit-learn/pull/34935) (see above)
+merged, and make the tools developed for it available in threadpoolctl.
 
-The biggest pieces will get their own blog post. Here is where each one
-stands.
+**`KMeans`.** Looking at why `sklearnex` is so much faster on [`KMeans`][kmeans] led to
+two PRs, the most promising speed-ups so far. On the Xeon server, the
+k-means++ initialization took most of the fit time.
+[#35140](https://github.com/scikit-learn/scikit-learn/pull/35140), merged and
+coming in scikit-learn 1.10, makes it ~8x to 20x faster in our benchmarks. The Lloyd
+iterations that follow stopped scaling at ~16 threads, because of costs that
+grow with the number of threads.
+[#35193](https://github.com/scikit-learn/scikit-learn/pull/35193), still under
+review, removes them, and makes the iterations several times faster on the
+server. Together with
+[OpenBLAS#6105](https://github.com/OpenMathLib/OpenBLAS/pull/6105), they
+should also close a long-standing issue,
+[#17334](https://github.com/scikit-learn/scikit-learn/issues/17334). This
+story might get its own blog post.
 
 **Documentation.** Many of the findings above (which build to install or how
 to set threads) belong in the
@@ -459,36 +461,11 @@ and [parallelism](https://scikit-learn.org/stable/computing/parallelism.html)
 guides of the scikit-learn documentation, with a section for Intel users,
 from laptops to data center servers.
 
-**`HistGradientBoosting` scalability.** See
-[#34935](https://github.com/scikit-learn/scikit-learn/pull/34935) above.
-
-**`KMeans`.** Looking at why `sklearnex` is so much faster on [`KMeans`][kmeans] led to
-two PRs, the most promising speed-ups so far. On the Xeon server, the k-means++ initialization took 75% to 97% of the
-fit time: for float32 data, it went through many small float64 BLAS calls,
-and for low-dimensional data, single-threaded NumPy passes dominated.
-[#35140](https://github.com/scikit-learn/scikit-learn/pull/35140), merged and
-coming in scikit-learn 1.10, computes each step of the initialization in a
-single OpenMP kernel. In our
-benchmarks, on one socket of the server, the initialization gets ~8x faster
-with OpenBLAS and ~20x faster with MKL (median over 34 cases), and ~10x
-faster on the laptop. The Lloyd iterations that follow stopped scaling at
-~16 threads, because of costs that grow with the number of threads: a lock
-to merge the per-thread buffers, the GIL taken by every thread at each
-iteration, and buffers allocated at each iteration.
-[#35193](https://github.com/scikit-learn/scikit-learn/pull/35193), still under
-review, removes them. In our benchmarks, the iterations get ~4x to ~6x faster (median) on one
-socket of the server, and up to 29x on sparse data. On the laptop, with fewer
-threads, it's on par with `main` in most cases.
-
-Once the second one is merged too, they should close a long-standing issue,
-[#17334](https://github.com/scikit-learn/scikit-learn/issues/17334), opened in
-2020: [`KMeans`][kmeans] with OpenBLAS getting much slower with more threads. On a
-recent Intel laptop, the reproducer of that issue takes ~65 s with the
-scikit-learn 1.9.1 wheel and ~10 s with both PRs. It drops under 1 s when
-combined with
-[OpenBLAS#6105](https://github.com/OpenMathLib/OpenBLAS/pull/6105), which
-removes the contention between threads calling BLAS concurrently, and will
-ship in the next OpenBLAS release.
+**Trees.** Binning is the main reason `sklearnex`'s random forests are faster,
+and the next big item is to add it to scikit-learn's [`RandomForest*`][rf] and
+[`ExtraTrees*`][et]. In parallel, I'm experimenting with faster sorting for exact
+splits: SIMD sort and radix sort. Radix sort gives very promising results on
+the laptop, but less good ones on the server for now.
 
 **Encoders.** Profiling a typical tabular pipeline showed [`OneHotEncoder`][onehotencoder] and
 [`OrdinalEncoder`][ordinalencoder] could take a surprising share of the time in some settings.
@@ -500,12 +477,6 @@ step, [#34678](https://github.com/scikit-learn/scikit-learn/pull/34678), tries
 to leverage the internal encoding of pandas categorical columns, but getting
 every edge case to behave exactly as on `main` turned out to be complex, so
 it's paused for now.
-
-**Trees.** Binning is the main reason `sklearnex`'s random forests are faster,
-and the next big item is to add it to scikit-learn's [`RandomForest*`][rf] and
-[`ExtraTrees*`][et]. In parallel, I'm experimenting with faster sorting for exact
-splits: SIMD sort and radix sort. Radix sort gives very promising results on
-the laptop, but less good ones on the server for now.
 
 **Linear models.** Copies of `X` can take a large share of the fit time of
 linear models: they are slow, single-threaded and double the peak memory,
