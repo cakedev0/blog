@@ -283,19 +283,23 @@ slower or faster depending on how it was installed.
 
 ### Big servers are built for many fits at once, not for one
 
-For a single fit, the 172-core server is often no faster than the 16-core
-laptop. [`Ridge`][ridge], [`LogisticRegression`][logisticregression] and
-[`KMeans`][kmeans] stop scaling after a few cores. With the same number of cores, both machines fit
-these models in about the same time. With all of them, which is the
-default, the server can even be slower: up to ~3x for a `Ridge` fit in our
+A many-core server is built to run many things at once. Hyperparameter
+searches are where it pays off: with many candidates fitted in parallel, it
+gets through fits ~10x to 15x faster than the laptop, even for linear models.
+That's close to the ratio of physical cores (172 vs 16).
+
+A single fit is a different story: the 172-core server is often no faster
+than the 16-core laptop. [`Ridge`][ridge],
+[`LogisticRegression`][logisticregression] and [`KMeans`][kmeans] stop
+scaling after a few cores. With the same number of cores, both machines fit
+these models in about the same time. With all of them, which is the default,
+the server can even be slower: up to ~3x for a `Ridge` fit in our
 [core-count scalability dashboard](https://probabl-ai.github.io/scikit-learn-benchmarks/snapshots/v1.rc/models_scalability.html).
 Only random forests and extra trees, whose trees are built independently,
-fit faster on the server.
-
-Hyperparameter searches are where the server pays off. With many candidates
-fitted in parallel, it gets through fits ~10x to 15x faster than the laptop,
-even for linear models. That's close to the ratio of physical cores (172 vs
-16).
+fit faster on the server. Some of this is inherent: many algorithms are hard
+to split across many cores, and past a few dozen cores, memory bandwidth and
+synchronization costs eat into the gains. Some of it can be improved, and that's
+what software optimization work is about.
 
 So if you work on a machine with many cores, parallelize the outer loop
 (hyperparameter search, cross-validation) instead of counting on a single fit
@@ -309,13 +313,13 @@ search.fit(X, y)
 On a 172-core server, that's the difference between using most of the
 machine and using a few percent of it.
 
-### `HistGradientBoosting`: the best number of threads depends on the data
+### `HistGradientBoosting`: the optimal number of threads depends on the data
 
 This is the clearest example of a thread-management problem. On the Xeon
-server, the best number of threads for a [`HistGradientBoosting*`][hgb] fit depends
+server, the optimal number of threads for a [`HistGradientBoosting*`][hgb] fit depends
 on the shape of the data: 1 thread for the smallest workloads, 4 to 8 for
 medium ones, 16 to 64 for the largest. Past that point, fits get slower: every workload is 2x to 30x slower
-on 128 or 172 threads than on its best thread count. And by default, HGB uses
+on 128 or 172 threads than on its optimal thread count. And by default, HGB uses
 all the cores of the machine.
 
 Until the fix lands, you can cap its OpenMP threads with threadpoolctl:
