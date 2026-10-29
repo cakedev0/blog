@@ -48,7 +48,7 @@ postauthors:
   [`HistGradientBoosting`][hgb], for instance, uses all of them by default, and can
   then be up to 30x slower than with fewer threads (a fix giving 2x to 10x
   speed-ups on small and medium datasets is under review).
-- If you need speed now, without waiting for these improvements to land in
+- If you need the speed-up, and don't want to wait for these improvements to land in
   scikit-learn, have a look at
   [scikit-learn-intelex](https://uxlfoundation.github.io/scikit-learn-intelex/2026.2/),
   an extension from the [UXL Foundation](https://uxlfoundation.org/), initially
@@ -62,7 +62,7 @@ In June, at VivaTech, Probabl and Intel
 to make scikit-learn faster on Intel hardware: Xeon CPUs, Intel GPUs, from
 high performance data center servers with hundreds of cores down to consumer
 laptops. We prioritized data center environments and use cases, where
-performance directly translates into cost. If a single fit only uses 4 cores of a 172-core server, the other 168 sit idle unless you give them other work, such as running many fits in parallel. Below we show how to do that, and what we are fixing so that a single fit uses more of the cores.
+performance directly translates into cost. If a single fit uses only 4 of the 172 cores, the remaining 168 sit idle unless given other work, such as running multiple fits in parallel. Below, we demonstrate how to do this, and explain how we've optimised a single fit to use more cores.
 
 > *"Enterprises run scikit-learn at scale while performance and cost directly
 > shape what they can build. Our work with Intel is about delivering
