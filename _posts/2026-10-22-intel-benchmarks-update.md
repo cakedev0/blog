@@ -360,10 +360,9 @@ machine and using a few percent of it.
 ### `HistGradientBoosting`: the best number of threads depends on the data
 
 This is the clearest example of a thread-management problem. On the Xeon
-server, the best number of
-threads for a `HistGradientBoosting*` fit grows with the size of the data: 1
-thread for the smallest workloads, 4 to 8 for medium ones, 16 to 64 for the
-largest. Past that point, fits get slower: every workload is 2x to 30x slower
+server, the best number of threads for a `HistGradientBoosting*` fit depends
+on the shape of the data: 1 thread for the smallest workloads, 4 to 8 for
+medium ones, 16 to 64 for the largest. Past that point, fits get slower: every workload is 2x to 30x slower
 on 128 or 172 threads than on its best thread count. And by default, HGB uses
 all the cores of the machine.
 
@@ -372,7 +371,7 @@ all the cores of the machine.
 
 *`HistGradientBoosting` fit time on the Xeon server, split by phase, for two
 real datasets of ~500k samples. One can observe that fit duration decreases
-when going from 1 to 8 or 16 threads depending on the size of the problem and
+when going from 1 to 8 or 16 threads depending on the shape of the data, and
 beyond that point thread scheduling overhead dominates to the point of
 degrading performance, especially on many-core hosts.*
 
