@@ -62,8 +62,7 @@ In June, at VivaTech, Probabl and Intel
 to make scikit-learn faster on Intel hardware: Xeon CPUs, Intel GPUs, from
 high performance data center servers with hundreds of cores down to consumer
 laptops. We prioritized data center environments and use cases, where
-performance directly translates into cost. If a fit only uses 4 cores of a 172-core server, you pay
-for the other 168 for nothing.
+performance directly translates into cost. If a single fit only uses 4 cores of a 172-core server, the other 168 sit idle unless you give them other work, such as running many fits in parallel. Below we show how to do that, and what we are fixing so that a single fit uses more of the cores.
 
 > *"Enterprises run scikit-learn at scale while performance and cost directly
 > shape what they can build. Our work with Intel is about delivering
@@ -356,7 +355,7 @@ server, the best number of threads for a [`HistGradientBoosting*`][hgb] fit depe
 on the shape of the data: 1 thread for the smallest workloads, 4 to 8 for
 medium ones, 16 to 64 for the largest. Past that point, fits get slower: every workload is 2x to 30x slower
 on 128 or 172 threads than on its best thread count. And by default, HGB uses
-all the cores of the machine.
+all the cores of the machine. Until the fix lands, capping the number of threads (for example with `threadpoolctl`) avoids the slowdown.
 
 ![`HistGradientBoosting` fit time by phase vs number of threads, on `year_prediction_msd` and `covtype` for a Xeon server](/assets/images/posts_images/intel-benchmarks/hgb_dashboard.png)
 ![Legend: bin fit, bin transform, other / unmeasured, apply split, find split, compute hist](/assets/images/posts_images/intel-benchmarks/hgb_dashboard_legend.png)
