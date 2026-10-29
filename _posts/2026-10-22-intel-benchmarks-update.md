@@ -461,11 +461,13 @@ and [parallelism](https://scikit-learn.org/stable/computing/parallelism.html)
 guides of the scikit-learn documentation, with a section for Intel users,
 from laptops to data center servers.
 
-**Trees.** Binning is the main reason `sklearnex`'s random forests are faster,
+**Trees.** Binning is one of the main reason `sklearnex`'s random forests are faster,
 and the next big item is to add it to scikit-learn's [`RandomForest*`][rf] and
 [`ExtraTrees*`][et]. In parallel, I'm experimenting with faster sorting for exact
-splits: SIMD sort and radix sort. Radix sort gives very promising results on
-the laptop, but less good ones on the server for now.
+splits: SIMD sort and radix sort. Radix sort gives very promising results.
+I'm also [experimenting](https://github.com/cakedev0/scikit-learn/pull/19)
+with free-threaded Python: with a lower-overhead thread pool, forest fits on
+the 172-core server get ~2.5x faster (median) than with the GIL.
 
 **Encoders.** Profiling a typical tabular pipeline showed [`OneHotEncoder`][onehotencoder] and
 [`OrdinalEncoder`][ordinalencoder] could take a surprising share of the time in some settings.
