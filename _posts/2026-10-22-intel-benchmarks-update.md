@@ -365,7 +365,7 @@ scikit-learn 1.2.2, where [`HistGradientBoosting`][hgb] gets up to ~20x
 slower on a 64-core server than on a laptop: that says more about thread
 management than about the hardware. Intel's
 [scikit-learn_bench](https://github.com/IntelPython/scikit-learn_bench) was a
-much better starting point: our suite started as a fork of it, before
+better starting point: our suite started as a fork of it, before
 growing into its own project.
 
 The suite fits and predicts with a restricted set of important estimators:
@@ -418,9 +418,9 @@ the scikit-learn PyPI wheel, for linear model fits. Each point is one case
 (estimator, dataset, parameters).*
 
 The same machinery also benchmarks scikit-learn pull requests before they get
-merged. This is for instance how I checked that preserving F-ordered data in
-[`LogisticRegression`][logisticregression] helps
-([example](https://github.com/probabl-ai/scikit-learn-benchmarks/pull/100)).
+merged. This is for instance how I measured the speed-up of the new k-means++
+initialization of [`KMeans`][kmeans]
+([example](https://github.com/probabl-ai/scikit-learn-benchmarks/pull/144)).
 
 ## What's next
 
