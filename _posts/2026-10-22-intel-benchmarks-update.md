@@ -283,11 +283,14 @@ slower or faster depending on how it was installed.
 
 ### Big servers are built for many fits at once, not for one
 
-For a single fit, the 172-core server mostly helps random forests and extra
-trees. For linear models, the laptop can be faster: performance cores in
-modern laptops are fast, and a single fit doesn't use many cores well. [`Ridge`][ridge],
-[`LogisticRegression`][logisticregression] and [`KMeans`][kmeans] with scikit-learn stop scaling after a few
-cores, and some get slower with more cores on the server.
+For a single fit, the 172-core server is often no faster than the 16-core
+laptop. [`Ridge`][ridge], [`LogisticRegression`][logisticregression] and
+[`KMeans`][kmeans] stop scaling after a few cores. With the same number of cores, both machines fit
+these models in about the same time. With all of them, which is the
+default, the server can even be slower: up to ~3x for a `Ridge` fit in our
+[core-count scalability dashboard](https://probabl-ai.github.io/scikit-learn-benchmarks/snapshots/v1.rc/models_scalability.html).
+Only random forests and extra trees, whose trees are built independently,
+fit faster on the server.
 
 Hyperparameter searches are where the server pays off. With many candidates
 fitted in parallel, it gets through fits ~10x to 15x faster than the laptop,
