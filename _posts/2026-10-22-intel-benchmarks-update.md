@@ -33,7 +33,7 @@ postauthors:
   glad that Probabl and Intel collaborate to improve them. As a first step,
   we built a benchmark suite for scikit-learn on Intel hardware, and focused
   on a few important estimators: linear models, tree-based models and
-  `KMeans`.
+  [`KMeans`][kmeans].
   The [code](https://github.com/probabl-ai/scikit-learn-benchmarks) and the
   [results](https://probabl-ai.github.io/scikit-learn-benchmarks/snapshots/v1.rc/)
   are public.
@@ -43,9 +43,9 @@ postauthors:
   without any change on their side, and not only on Intel hardware.
 - If you run scikit-learn on a machine with many cores, the benchmark results
   are worth a closer look. The main tip: set `n_jobs` on the outer loop
-  (`GridSearchCV`, `cross_validate`...) rather than counting on a single fit
+  ([`GridSearchCV`][gridsearchcv], [`cross_validate`][cross_validate]...) rather than counting on a single fit
   to use all the cores. A single fit rarely uses them well:
-  `HistGradientBoosting`, for instance, uses all of them by default, and can
+  [`HistGradientBoosting`][hgb], for instance, uses all of them by default, and can
   then be up to 30x slower than with fewer threads (a fix giving 2x to 10x
   speed-ups on small and medium datasets is under review).
 - If you need speed now, without waiting for these improvements to land in
@@ -54,7 +54,7 @@ postauthors:
   an extension from the [UXL Foundation](https://uxlfoundation.org/), initially
   developed by Intel, that swaps in faster implementations while keeping the
   scikit-learn API. Among what we benchmarked, it's the fastest option today
-  for tree-based models and `KMeans`. For linear models, the fastest is the
+  for tree-based models and [`KMeans`][kmeans]. For linear models, the fastest is the
   [MKL build of scikit-learn](#for-linear-models-pick-the-mkl-build).
 
 In June, at VivaTech, Probabl and Intel
@@ -93,7 +93,7 @@ In short:
   narwhals and conda-forge. Some came with a fix, like the three
   merged in oneDAL.
 - In scikit-learn, merged speed-ups for the encoders and for trees on
-  conda-forge, and open PRs for `HistGradientBoosting`, `KMeans` and
+  conda-forge, and open PRs for [`HistGradientBoosting`][hgb], [`KMeans`][kmeans] and
   pandas categorical columns in encoders.
 - Around the benchmarks, work by others in the collaboration: official Intel
   GPU support through the Python array API in scikit-learn 1.9, threadpoolctl 3.7.0,
@@ -124,7 +124,7 @@ Existing benchmarks were addressing different performance questions or were
 meant as functionality tests. For instance, the
 [scikit-learn workload of the Phoronix Test Suite](https://openbenchmarking.org/test/pts/scikit-learn),
 which many hardware reviews use, runs the benchmark scripts of scikit-learn
-1.2.2. Some of them scale extremely poorly: `HistGradientBoosting` gets up to
+1.2.2. Some of them scale extremely poorly: [`HistGradientBoosting`][hgb] gets up to
 ~20x slower on a 64-core server than on a laptop. That says
 more about the benchmark (and about thread management, more on that below)
 than about the hardware.
@@ -140,19 +140,11 @@ merged. So it grew into its own project.
 
 The suite fits and predicts with a restricted set of important estimators:
 
-- Linear models:
-  [`LinearRegression`](https://scikit-learn.org/stable/modules/generated/sklearn.linear_model.LinearRegression.html),
-  [`Ridge`](https://scikit-learn.org/stable/modules/generated/sklearn.linear_model.Ridge.html)
-  and
-  [`LogisticRegression`](https://scikit-learn.org/stable/modules/generated/sklearn.linear_model.LogisticRegression.html)
-- Tree-based models:
-  [`RandomForest*`](https://scikit-learn.org/stable/modules/ensemble.html#random-forests),
-  [`ExtraTrees*`](https://scikit-learn.org/stable/modules/ensemble.html#extremely-randomized-trees)
-  and
-  [`HistGradientBoosting*`](https://scikit-learn.org/stable/modules/ensemble.html#histogram-based-gradient-boosting)
-  (classifiers and regressors)
-- Clustering:
-  [`KMeans`](https://scikit-learn.org/stable/modules/generated/sklearn.cluster.KMeans.html)
+- Linear models: [`LinearRegression`][linearregression], [`Ridge`][ridge]
+  and [`LogisticRegression`][logisticregression]
+- Tree-based models: [`RandomForest*`][rf], [`ExtraTrees*`][et] and
+  [`HistGradientBoosting*`][hgb] (classifiers and regressors)
+- Clustering: [`KMeans`][kmeans]
 
 They run on two kinds of data. Synthetic datasets cover a matrix of shapes
 (many samples, many features, tiny, large...) while keeping the total runtime
@@ -209,7 +201,7 @@ keeping the rest fixed:
 - [Core-count scalability](https://probabl-ai.github.io/scikit-learn-benchmarks/snapshots/v1.rc/models_scalability.html):
   how the time of a single fit changes with the number of cores
 - [Hyperparameter search scalability](https://probabl-ai.github.io/scikit-learn-benchmarks/snapshots/v1.rc/hptuning_scalability.html):
-  how a `RandomizedSearchCV` scales with its outer `n_jobs`
+  how a [`RandomizedSearchCV`][randomizedsearchcv] scales with its outer `n_jobs`
 - [`HistGradientBoosting` breakdown](https://probabl-ai.github.io/scikit-learn-benchmarks/snapshots/v1.rc/hgb_scaling.html):
   which phases of an HGB fit scale with threads and which don't
 
@@ -224,7 +216,7 @@ the scikit-learn PyPI wheel, for linear model fits. Each point is one case
 
 I also started using the same machinery to benchmark scikit-learn pull
 requests, through some automation. This is for instance what I used to check
-that preserving F-ordered data in `LogisticRegression` helps
+that preserving F-ordered data in [`LogisticRegression`][logisticregression] helps
 ([example](https://github.com/probabl-ai/scikit-learn-benchmarks/pull/100)).
 
 
@@ -236,7 +228,7 @@ that preserving F-ordered data in `LogisticRegression` helps
 the oneDAL library (both are now part of the UXL Foundation), and keeps the
 scikit-learn API. Among everything we
 benchmarked, it's the option that speeds up the most cases on CPU. Tree-based
-models and `KMeans` gain the most: `KMeans` fits are ~3x faster and never
+models and [`KMeans`][kmeans] gain the most: `KMeans` fits are ~3x faster and never
 slower than with scikit-learn. Linear models gain less.
 
 It also makes much better use of big machines. With scikit-learn, random
@@ -258,7 +250,7 @@ surfaced a number of bugs. I reported 11 issues to
 and oneDAL, and sent fixes for some
 of the tree ones. The most impactful:
 
-- `ExtraTreesRegressor` stopped splitting too early
+- [`ExtraTreesRegressor`][extratreesregressor] stopped splitting too early
   ([oneDAL#3648](https://github.com/uxlfoundation/oneDAL/issues/3648), fixed
   in [oneDAL#3649](https://github.com/uxlfoundation/oneDAL/pull/3649)).
 - Best-first tree growth (`max_leaf_nodes`) expands leaves in a worse order
@@ -273,12 +265,12 @@ of the tree ones. The most impactful:
   [sklearnex#3357](https://github.com/uxlfoundation/scikit-learn-intelex/pull/3357)
   and
   [sklearnex#3358](https://github.com/uxlfoundation/scikit-learn-intelex/pull/3358)).
-- On laptops, multinomial `LogisticRegression` on 4 threads or more stops too
+- On laptops, multinomial [`LogisticRegression`][logisticregression] on 4 threads or more stops too
   early and returns a worse model
   ([oneDAL#3820](https://github.com/uxlfoundation/oneDAL/issues/3820), with a
   fix proposed in [oneDAL#3912](https://github.com/uxlfoundation/oneDAL/pull/3912)). This
   needs to be fixed before any performance measurements.
-- CPU `Ridge` is much slower than scikit-learn when
+- CPU [`Ridge`][ridge] is much slower than scikit-learn when
   `n_features > n_samples`, because it doesn't use the dual formulation like
   scikit-learn does
   ([sklearnex#3377](https://github.com/uxlfoundation/scikit-learn-intelex/issues/3377),
@@ -304,7 +296,7 @@ pixi add scikit-learn "libblas=*=*mkl"
 It's also possible to install an MKL build
 [with pip, from Intel's index](https://github.com/intel/optimization-zone/tree/main/software/scikit-learn#blas-and-lapack).
 
-The PyPI build had a much bigger problem with `LogisticRegression`, now fixed
+The PyPI build had a much bigger problem with [`LogisticRegression`][logisticregression], now fixed
 upstream. On the
 laptop, every conda-forge build fits it much faster than the PyPI one, up to
 ~10x on some datasets. With PyPI, it even gets slower as soon as it runs on
@@ -315,7 +307,7 @@ was fixed in a more recent OpenBLAS, which scipy now ships
 ([scipy#26193](https://github.com/scipy/scipy/pull/26193#issuecomment-5886021070)).
 The fix is in scipy 2.0, and should be backported to 1.18.2.
 
-A smaller one, but in scikit-learn itself: `ExtraTrees` fits were ~25% slower
+A smaller one, but in scikit-learn itself: [`ExtraTrees`][et] fits were ~25% slower
 on conda-forge than with PyPI. conda-forge compiles against the headers of an
 old glibc (2.17), where `isnan` is a macro that calls a glibc function instead
 of the compiler builtin. So every `isnan` in the hot loops of the trees became
@@ -334,8 +326,8 @@ slower or faster depending on how it was installed.
 
 For a single fit, the 172-core server mostly helps random forests and extra
 trees. For linear models, the laptop can be faster: performance cores in
-modern laptops are fast, and a single fit doesn't use many cores well. `Ridge`,
-`LogisticRegression` and `KMeans` with scikit-learn stop scaling after a few
+modern laptops are fast, and a single fit doesn't use many cores well. [`Ridge`][ridge],
+[`LogisticRegression`][logisticregression] and [`KMeans`][kmeans] with scikit-learn stop scaling after a few
 cores, and some get slower with more cores on the server.
 
 Hyperparameter searches are where the server pays off. With many candidates
@@ -347,7 +339,7 @@ The two levels of parallelism (candidates in parallel, threads inside each
 fit) don't always cooperate. joblib limits the number of OpenMP and BLAS
 threads in its worker processes, but not the threads that random forests
 start with joblib's threading backend. On the server, a search over
-`RandomForestClassifier` gets up to ~1.8x slower beyond ~22 outer workers
+[`RandomForestClassifier`][randomforestclassifier] gets up to ~1.8x slower beyond ~22 outer workers
 because of this oversubscription. This won't be the case in the next joblib
 release: [joblib#1825](https://github.com/joblib/joblib/pull/1825) now limits
 these nested calls too.
@@ -360,7 +352,7 @@ machine and using a few percent of it.
 ### `HistGradientBoosting`: the best number of threads depends on the data
 
 This is the clearest example of a thread-management problem. On the Xeon
-server, the best number of threads for a `HistGradientBoosting*` fit depends
+server, the best number of threads for a [`HistGradientBoosting*`][hgb] fit depends
 on the shape of the data: 1 thread for the smallest workloads, 4 to 8 for
 medium ones, 16 to 64 for the largest. Past that point, fits get slower: every workload is 2x to 30x slower
 on 128 or 172 threads than on its best thread count. And by default, HGB uses
@@ -392,11 +384,11 @@ full story will get its own blog post.
 ### GPUs and the Python array API: early results
 
 Intel GPUs are officially supported through the array API since scikit-learn
-1.9, with PyTorch's XPU device and with dpnp. Only `LogisticRegression` and `Ridge`
+1.9, with PyTorch's XPU device and with dpnp. Only [`LogisticRegression`][logisticregression] and [`Ridge`][ridge]
 are benchmarked on GPU for now, and here is where we stand:
 
-- `LogisticRegression` on GPU is fairly fast.
-- `Ridge` uses the SVD solver under the array API instead of Cholesky, which
+- [`LogisticRegression`][logisticregression] on GPU is fairly fast.
+- [`Ridge`][ridge] uses the SVD solver under the array API instead of Cholesky, which
   makes it much slower than the Cholesky solver used by default on CPU.
   [#35060](https://github.com/scikit-learn/scikit-learn/issues/35060) proposes
   adding array API support to the Cholesky solver.
@@ -412,7 +404,7 @@ fixes listed above.
 
 Other issues found and fixed along the way:
 [an OpenBLAS crash](https://github.com/OpenMathLib/OpenBLAS/issues/5958) with
-`KMeans` on the 344-logical-CPU server,
+[`KMeans`][kmeans] on the 344-logical-CPU server,
 [wrong physical core counts in loky](https://github.com/joblib/loky/issues/639)
 under CPU affinity.
 
@@ -420,7 +412,7 @@ under CPU affinity.
 
 For the next months, our priorities are:
 
-1. Improve the scalability of `HistGradientBoosting`, and make the new tools
+1. Improve the scalability of [`HistGradientBoosting`][hgb], and make the new tools
    developed for this available in `threadpoolctl`
 2. Turn the findings into performance guidance in the scikit-learn
    documentation
@@ -443,7 +435,7 @@ from laptops to data center servers.
 **`HistGradientBoosting` scalability.** See
 [#34935](https://github.com/scikit-learn/scikit-learn/pull/34935) above.
 
-**`KMeans`.** Looking at why `sklearnex` is so much faster on `KMeans` led to
+**`KMeans`.** Looking at why `sklearnex` is so much faster on [`KMeans`][kmeans] led to
 two PRs, still under review, that look like the most promising speed-ups so
 far. On the Xeon server, the k-means++ initialization took 75% to 97% of the
 fit time: for float32 data, it went through many small float64 BLAS calls,
@@ -463,7 +455,7 @@ threads, it's on par with `main` in most cases.
 
 If they are merged, they should also close a long-standing issue,
 [#17334](https://github.com/scikit-learn/scikit-learn/issues/17334), opened in
-2020: `KMeans` with OpenBLAS getting much slower with more threads. On a
+2020: [`KMeans`][kmeans] with OpenBLAS getting much slower with more threads. On a
 recent Intel laptop, the reproducer of that issue takes ~65 s with the
 scikit-learn 1.9.1 wheel and ~10 s with both PRs. It drops under 1 s when
 combined with
@@ -471,8 +463,8 @@ combined with
 removes the contention between threads calling BLAS concurrently, and will
 ship in the next OpenBLAS release.
 
-**Encoders.** Profiling a typical tabular pipeline showed `OneHotEncoder` and
-`OrdinalEncoder` could take a surprising share of the time in some settings.
+**Encoders.** Profiling a typical tabular pipeline showed [`OneHotEncoder`][onehotencoder] and
+[`OrdinalEncoder`][ordinalencoder] could take a surprising share of the time in some settings.
 Itamar Turner-Trauring sped up unique value counts for strings
 ([#34386](https://github.com/scikit-learn/scikit-learn/pull/34386)). I made
 the encoders work on F-ordered data
@@ -483,8 +475,8 @@ every edge case to behave exactly as on `main` turned out to be complex, so
 it's paused for now.
 
 **Trees.** Binning is the main reason `sklearnex`'s random forests are faster,
-and the next big item is to add it to scikit-learn's `RandomForest*` and
-`ExtraTrees*`. In parallel, I'm experimenting with faster sorting for exact
+and the next big item is to add it to scikit-learn's [`RandomForest*`][rf] and
+[`ExtraTrees*`][et]. In parallel, I'm experimenting with faster sorting for exact
 splits: SIMD sort and radix sort. Radix sort gives very promising results on
 the laptop, but less good ones on the server for now.
 
@@ -496,7 +488,7 @@ the copies that can be avoided.
 **Benchmarks.**
 
 - More estimators: `PCA`, `LogisticRegressionCV` and `RidgeCV`.
-- XGBoost, LightGBM and CatBoost, to compare `HistGradientBoosting*` with them
+- XGBoost, LightGBM and CatBoost, to compare [`HistGradientBoosting*`][hgb] with them
   systematically.
 - Discrete Intel GPUs, and more CUDA results to compare them with.
 - A new version of the Phoronix scikit-learn workload, based on a subset of
@@ -534,3 +526,18 @@ the reviews, to [Itamar Turner-Trauring](https://github.com/itamarst) for the
 encoders and threading work, and to the scikit-learn-intelex and oneDAL
 maintainers at Intel for providing the hardware, and for their quick answers
 and fixes, in particular [David Cortes](https://github.com/david-cortes-intel).
+
+[cross_validate]: https://scikit-learn.org/stable/modules/generated/sklearn.model_selection.cross_validate.html
+[et]: https://scikit-learn.org/stable/modules/ensemble.html#extremely-randomized-trees
+[extratreesregressor]: https://scikit-learn.org/stable/modules/generated/sklearn.ensemble.ExtraTreesRegressor.html
+[gridsearchcv]: https://scikit-learn.org/stable/modules/generated/sklearn.model_selection.GridSearchCV.html
+[hgb]: https://scikit-learn.org/stable/modules/ensemble.html#histogram-based-gradient-boosting
+[kmeans]: https://scikit-learn.org/stable/modules/generated/sklearn.cluster.KMeans.html
+[linearregression]: https://scikit-learn.org/stable/modules/generated/sklearn.linear_model.LinearRegression.html
+[logisticregression]: https://scikit-learn.org/stable/modules/generated/sklearn.linear_model.LogisticRegression.html
+[onehotencoder]: https://scikit-learn.org/stable/modules/generated/sklearn.preprocessing.OneHotEncoder.html
+[ordinalencoder]: https://scikit-learn.org/stable/modules/generated/sklearn.preprocessing.OrdinalEncoder.html
+[randomforestclassifier]: https://scikit-learn.org/stable/modules/generated/sklearn.ensemble.RandomForestClassifier.html
+[randomizedsearchcv]: https://scikit-learn.org/stable/modules/generated/sklearn.model_selection.RandomizedSearchCV.html
+[rf]: https://scikit-learn.org/stable/modules/ensemble.html#random-forests
+[ridge]: https://scikit-learn.org/stable/modules/generated/sklearn.linear_model.Ridge.html
